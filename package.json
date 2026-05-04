@@ -1,0 +1,14 @@
+{
+  "name": "hikechain",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:be": "npm run dev -w apps/backend",
+    "dev:fe": "npm run start -w apps/frontend",
+    "build:be": "npm run build -w apps/backend"
+  }
+}

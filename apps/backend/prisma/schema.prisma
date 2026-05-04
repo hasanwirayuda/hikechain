@@ -1,0 +1,181 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ─── Users ────────────────────────────────────────────────
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  fcmToken     String?  @map("fcm_token")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  ledGroups          Group[]            @relation("GroupLeader")
+  groupMemberships   GroupMember[]
+  sessionMemberships SessionMember[]
+  checkpointRecords  CheckpointRecord[]
+  locationLogs       LocationLog[]
+
+  @@map("users")
+}
+
+// ─── Mountains ────────────────────────────────────────────
+model Mountain {
+  id               String   @id @default(uuid())
+  name             String
+  location         String
+  description      String
+  latitude         Float
+  longitude        Float
+  totalCheckpoints Int      @map("total_checkpoints")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  checkpoints    Checkpoint[]
+  groups         Group[]
+  hikingSessions HikingSession[]
+
+  @@map("mountains")
+}
+
+// ─── Checkpoints ──────────────────────────────────────────
+model Checkpoint {
+  id           String   @id @default(uuid())
+  mountainId   String   @map("mountain_id")
+  orderNumber  Int      @map("order_number")
+  name         String
+  latitude     Float
+  longitude    Float
+  radiusMeters Float    @default(50) @map("radius_meters")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  mountain          Mountain           @relation(fields: [mountainId], references: [id])
+  checkpointRecords CheckpointRecord[]
+
+  @@unique([mountainId, orderNumber])
+  @@map("checkpoints")
+}
+
+// ─── Groups ───────────────────────────────────────────────
+model Group {
+  id         String      @id @default(uuid())
+  mountainId String      @map("mountain_id")
+  leaderId   String      @map("leader_id")
+  name       String
+  code       String      @unique
+  status     GroupStatus @default(WAITING)
+  maxMembers Int         @default(6) @map("max_members")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+
+  mountain      Mountain       @relation(fields: [mountainId], references: [id])
+  leader        User           @relation("GroupLeader", fields: [leaderId], references: [id])
+  members       GroupMember[]
+  hikingSession HikingSession?
+
+  @@map("groups")
+}
+
+enum GroupStatus {
+  WAITING
+  HIKING
+  COMPLETED
+}
+
+// ─── Group Members ────────────────────────────────────────
+model GroupMember {
+  id       String          @id @default(uuid())
+  groupId  String          @map("group_id")
+  userId   String          @map("user_id")
+  role     GroupMemberRole @default(MEMBER)
+  joinedAt DateTime        @default(now()) @map("joined_at")
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@map("group_members")
+}
+
+enum GroupMemberRole {
+  LEADER
+  MEMBER
+}
+
+// ─── Hiking Sessions ──────────────────────────────────────
+model HikingSession {
+  id                   String        @id @default(uuid())
+  groupId              String        @unique @map("group_id")
+  mountainId           String        @map("mountain_id")
+  status               SessionStatus @default(ONGOING)
+  startedAt            DateTime      @default(now()) @map("started_at")
+  endedAt              DateTime?     @map("ended_at")
+  totalDurationSeconds Int?          @map("total_duration_seconds")
+
+  group             Group             @relation(fields: [groupId], references: [id])
+  mountain          Mountain          @relation(fields: [mountainId], references: [id])
+  members           SessionMember[]
+  checkpointRecords CheckpointRecord[]
+  locationLogs      LocationLog[]
+
+  @@map("hiking_sessions")
+}
+
+enum SessionStatus {
+  ONGOING
+  COMPLETED
+}
+
+// ─── Session Members ──────────────────────────────────────
+model SessionMember {
+  id                   String    @id @default(uuid())
+  sessionId            String    @map("session_id")
+  userId               String    @map("user_id")
+  joinedAt             DateTime  @default(now()) @map("joined_at")
+  finishedAt           DateTime? @map("finished_at")
+  checkpointsCompleted Int       @default(0) @map("checkpoints_completed")
+  totalTimeSeconds     Int?      @map("total_time_seconds")
+
+  session HikingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User          @relation(fields: [userId], references: [id])
+
+  @@unique([sessionId, userId])
+  @@map("session_members")
+}
+
+// ─── Checkpoint Records ───────────────────────────────────
+model CheckpointRecord {
+  id             String   @id @default(uuid())
+  sessionId      String   @map("session_id")
+  userId         String   @map("user_id")
+  checkpointId   String   @map("checkpoint_id")
+  orderNumber    Int      @map("order_number")
+  arrivedAt      DateTime @map("arrived_at")
+  elapsedSeconds Int      @map("elapsed_seconds")
+
+  session    HikingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user       User          @relation(fields: [userId], references: [id])
+  checkpoint Checkpoint    @relation(fields: [checkpointId], references: [id])
+
+  @@unique([sessionId, userId, checkpointId])
+  @@map("checkpoint_records")
+}
+
+// ─── Location Logs ────────────────────────────────────────
+model LocationLog {
+  id             String   @id @default(uuid())
+  sessionId      String   @map("session_id")
+  userId         String   @map("user_id")
+  latitude       Float
+  longitude      Float
+  accuracyMeters Float?   @map("accuracy_meters")
+  isSynced       Boolean  @default(true) @map("is_synced")
+  recordedAt     DateTime @map("recorded_at")
+
+  session HikingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User          @relation(fields: [userId], references: [id])
+
+  @@index([sessionId, userId, recordedAt])
+  @@map("location_logs")
+}
